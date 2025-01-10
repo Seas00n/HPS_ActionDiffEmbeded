@@ -5,6 +5,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from collections import defaultdict
 from algo import ActChangeNN, VAE, LatentDynNN
+import matplotlib.pyplot as plt
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dataset = np.load("./result/exp_dataset_nor.npz")
@@ -16,6 +17,8 @@ actdiffnn = ActChangeNN(state_dim=state.shape[1],context_dim=context.shape[1],ac
 actdiffnn.load_state_dict(torch.load("./result/act_diff_200000.pth", map_location=device))
 for param in actdiffnn.parameters():
     param.requires_grad = False
+
+
 
 class ActChangeDataset:
     def __init__(self, states, contexts, actions):
@@ -83,34 +86,47 @@ batch_size=100
 beta_kl = 0.1
 beta_dyn = 0.1
 
-for epoch in range(num_epoch_action):
-    s_diff, c, a, a_diff = dataset.sample_random_pairs(batch_size)
+mode = "play"
 
-    a_recon, e_mean, e_logvar = vae(context=c, action=a)
+if mode == "train":
+    for epoch in range(num_epoch_action):
+        s_diff, c, a, a_diff = dataset.sample_random_pairs(batch_size)
 
-    recon_loss = F.mse_loss(a_recon, a)
+        a_recon, e_mean, e_logvar = vae(context=c, action=a)
 
-    KL_loss = -0.5*(1+e_logvar-e_mean.pow(2)-e_logvar.exp()).mean()
-    
-    delta_e_pred = latent_dynNN(state_diff=s_diff, context=c, z=e_mean)
+        recon_loss = F.mse_loss(a_recon, a)
 
-    a_pred_recon = vae.decode(context=c, z=e_mean+delta_e_pred)
+        KL_loss = -0.5*(1+e_logvar-e_mean.pow(2)-e_logvar.exp()).mean()
+        
+        delta_e_pred = latent_dynNN(state_diff=s_diff, context=c, z=e_mean)
 
-    pred_loss = F.mse_loss(a_pred_recon, a+a_diff)
+        a_pred_recon = vae.decode(context=c, z=e_mean+delta_e_pred)
 
-    total_loss = recon_loss+beta_kl*KL_loss+beta_dyn*pred_loss
+        pred_loss = F.mse_loss(a_pred_recon, a+a_diff)
 
-    optimizer.zero_grad()
-    total_loss.backward()
-    optimizer.step()
-    
-    if (epoch+1)%500 == 0:
-        print("Itr"+str(epoch+1)+"Training Loss"+"{:.4}".format(total_loss.cpu().data.numpy())+
-              ",ReconLoss"+"{:.4}".format(recon_loss.cpu().data.numpy())+
-              ",KLLoss"+"{:.4}".format(KL_loss.cpu().data.numpy())+
-              ",dynLoss"+"{:.4}".format(pred_loss.cpu().data.numpy()))
+        total_loss = recon_loss+beta_kl*KL_loss+beta_dyn*pred_loss
 
-torch.save(vae.state_dict(), "./result/vae_{}.pth".format(num_epoch_action))
-torch.save(latent_dynNN.state_dict(), "./result/latent_dynNN_{}.pth".format(num_epoch_action))
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
+        
+        if (epoch+1)%500 == 0:
+            print("Itr"+str(epoch+1)+"Training Loss"+"{:.4}".format(total_loss.cpu().data.numpy())+
+                ",ReconLoss"+"{:.4}".format(recon_loss.cpu().data.numpy())+
+                ",KLLoss"+"{:.4}".format(KL_loss.cpu().data.numpy())+
+                ",dynLoss"+"{:.4}".format(pred_loss.cpu().data.numpy()))
 
+    torch.save(vae.state_dict(), "./result/vae_{}.pth".format(num_epoch_action))
+    torch.save(latent_dynNN.state_dict(), "./result/latent_dynNN_{}.pth".format(num_epoch_action))
 
+else:
+    vae.load_state_dict(torch.load("./result/vae_{}.pth".format(num_epoch_action),map_location=device))
+    all_latent_z = []
+    for i in range(state.shape[0]):
+        obs = torch.FloatTensor(context[i,:].reshape((1,-1))).to(device)
+        act = torch.FloatTensor(action[i,:].reshape((1,-1))).to(device)
+        latent_z = vae.encode(context=obs, action=act).reshape((1,-1))
+        all_latent_z.append(latent_z.cpu().data.numpy())
+        act_decode = vae.decode(context=obs, z=latent_z)
+        print("Act", act)
+        print("Act_decode", act_decode)
