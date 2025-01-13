@@ -31,7 +31,8 @@ class VAE(nn.Module):
         self.fe = nn.Sequential(
             nn.Linear(context_dim+action_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim)
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU()
         )
         self.fmean = nn.Linear(hidden_dim, latent_dim)
         self.flog_std = nn.Linear(hidden_dim, latent_dim)

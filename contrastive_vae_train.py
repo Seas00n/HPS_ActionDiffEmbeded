@@ -50,6 +50,10 @@ class ActChangeDataset:
             selected_contexts.append(np.array(context_str.strip("()").split(", ")).astype(np.float32))
         
         selected_contexts = torch.asarray(np.array(selected_contexts)).to(device)
+        contexts_noise = torch.randn(selected_contexts.shape).to(device)
+        contexts_noise[:,0] = torch.clip(contexts_noise[:,0],-1,1)*0.1
+        contexts_noise[:,1] = torch.clip(contexts_noise[:,1],-1,1)*1.5
+        selected_contexts = selected_contexts+contexts_noise
         state_diffs_interp = torch.vstack([(self.states[sampled_indices_i]-self.states[sampled_indices_j])*alpha for alpha in np.linspace(0,1,5)[:3]]).to(device)
         context_interp = torch.vstack([selected_contexts for i in range(3)]).to(device)
         action_pred_interp = torch.vstack([self.actions[sampled_indices_i] for i in range(3)]).to(device)
@@ -79,14 +83,14 @@ latent_dynNN = LatentDynNN(state_dim=state.shape[1], context_dim=context.shape[1
 
 optimizer = optim.Adam(list(vae.parameters())+list(latent_dynNN.parameters()), lr=1e-4)
 
-num_epoch_action = 500000
+num_epoch_action = 100000
 
 batch_size=100
 
-beta_kl = 0.1
+beta_kl = 0.01
 beta_dyn = 0.1
 
-mode = "play"
+mode = "train"
 
 if mode == "train":
     for epoch in range(num_epoch_action):
@@ -116,8 +120,8 @@ if mode == "train":
                 ",KLLoss"+"{:.4}".format(KL_loss.cpu().data.numpy())+
                 ",dynLoss"+"{:.4}".format(pred_loss.cpu().data.numpy()))
 
-    torch.save(vae.state_dict(), "./result/vae_{}.pth".format(num_epoch_action))
-    torch.save(latent_dynNN.state_dict(), "./result/latent_dynNN_{}.pth".format(num_epoch_action))
+    torch.save(vae.state_dict(), "./result/vae_{}_{}.pth".format(num_epoch_action, beta_kl))
+    torch.save(latent_dynNN.state_dict(), "./result/latent_dynNN_{}_{}.pth".format(num_epoch_action,beta_kl))
 
 else:
     vae.load_state_dict(torch.load("./result/vae_{}.pth".format(num_epoch_action),map_location=device))
