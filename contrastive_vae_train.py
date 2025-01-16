@@ -104,9 +104,10 @@ if mode == "train":
         
         delta_e_pred = latent_dynNN(state_diff=s_diff, context=c, z=e_mean)
 
-        a_pred_recon = vae.decode(context=c, z=e_mean+delta_e_pred)
+        # a_pred_recon = vae.decode(context=c, z=e_mean+delta_e_pred)
 
-        pred_loss = F.mse_loss(a_pred_recon, a+a_diff)
+        # pred_loss = F.mse_loss(a_pred_recon, a+a_diff)
+        pred_loss = 
 
         total_loss = recon_loss+beta_kl*KL_loss+beta_dyn*pred_loss
 
